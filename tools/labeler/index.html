@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>CSI labeler</title>
+<style>
+  :root { --bg:#111; --fg:#eee; --btn:#2b2b2b; --on:#1f7a3a; --warn:#a33; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px system-ui,sans-serif; padding:12px; }
+  #now { text-align:center; padding:10px 0 14px; }
+  #cur { font-size:2rem; font-weight:700; }
+  #timer { font-size:1.2rem; opacity:.8; }
+  #grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button { font:inherit; font-size:1.3rem; padding:22px 8px; border:0; border-radius:12px;
+           background:var(--btn); color:var(--fg); }
+  button.active { background:var(--on); }
+  button:active { filter:brightness(1.4); }
+  #stop { grid-column:1 / -1; background:var(--warn); }
+  input { width:100%; font:inherit; padding:12px; margin:12px 0; border-radius:8px; border:1px solid #555;
+          background:#222; color:var(--fg); }
+  #log { font:13px ui-monospace,monospace; opacity:.8; white-space:pre-wrap; }
+  #err { color:#f88; min-height:1.2em; text-align:center; }
+</style>
+</head>
+<body>
+<div id="now">
+  <div id="cur">–</div>
+  <div id="timer"></div>
+</div>
+<div id="err"></div>
+<input id="note" placeholder="Note (e.g. interference source: fan speed 2)" maxlength="200">
+<div id="grid"></div>
+<h4>Last events</h4>
+<div id="log"></div>
+
+<script>
+const token = new URLSearchParams(location.search).get("t") || "";
+let state = null;
+const $ = id => document.getElementById(id);
+
+async function call(path, body) {
+  try {
+    const r = await fetch(path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {"X-Token": token, "Content-Type": "application/json"},
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.status);
+    $("err").textContent = "";
+    state = data;
+    render();
+  } catch (e) {
+    $("err").textContent = "Connection problem: " + e.message;
+  }
+}
+
+function press(label) {
+  if (navigator.vibrate) navigator.vibrate(40);
+  call("/event", {label, note: $("note").value});
+  $("note").value = "";
+}
+
+function render() {
+  if (!state) return;
+  const grid = $("grid");
+  if (!grid.children.length) {
+    for (const l of state.labels) {
+      const b = document.createElement("button");
+      b.id = "b_" + l; b.textContent = l;
+      b.onclick = () => press(l);
+      grid.appendChild(b);
+    }
+    const s = document.createElement("button");
+    s.id = "stop"; s.textContent = "stop (end label)";
+    s.onclick = () => call("/stop", {});
+    grid.appendChild(s);
+  }
+  for (const l of state.labels) $("b_" + l).classList.toggle("active", l === state.current);
+  $("cur").textContent = state.current || "no label";
+  $("log").textContent = state.recent.slice().reverse().map(e =>
+    new Date(e.t * 1000).toLocaleTimeString() + "  " + e.event.padEnd(5) + e.label + (e.note ? "  (" + e.note + ")" : "")
+  ).join("\n");
+}
+
+let offset = 0;
+setInterval(() => {
+  if (state) offset = state.now - Date.now() / 1000;
+  if (state && state.since) {
+    const s = Math.max(0, Math.floor(Date.now() / 1000 + offset - state.since));
+    $("timer").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  } else $("timer").textContent = "";
+}, 500);
+setInterval(() => call("/state"), 5000);
+
+(async () => { try { await navigator.wakeLock.request("screen"); } catch (e) {} })();
+call("/state");
+</script>
+</body>
+</html>
