@@ -27,3 +27,6 @@ data/*
 sdkconfig
 sdkconfig.old
 managed_components/
+
+# Training runs (models, metrics)
+ml/runs/
