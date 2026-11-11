@@ -1,0 +1,11 @@
+menu "CSI transmitter"
+
+    config CSI_TX_FREQUENCY_HZ
+        int "Frames per second"
+        range 1 500
+        default 100
+        help
+            Must divide CONFIG_FREERTOS_HZ (1000) evenly, otherwise the build fails.
+            Allowed examples: 20, 25, 40, 50, 100, 200, 250, 500.
+
+endmenu

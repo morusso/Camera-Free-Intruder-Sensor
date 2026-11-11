@@ -22,3 +22,8 @@ dist/
 # Data (large raw recordings)
 data/*
 !data/.gitkeep
+
+# ESP-IDF generated
+sdkconfig
+sdkconfig.old
+managed_components/

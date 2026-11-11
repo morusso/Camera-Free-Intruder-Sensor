@@ -1,0 +1,22 @@
+menu "CSI receiver"
+
+    config CSI_RX_USE_HTLTF
+        bool "Also capture HT-LTF (longer CSI, more data over serial)"
+        default n
+        help
+            Off: legacy LTF only (about 128 values per frame).
+            On: LLTF + HT-LTF (up to 384 values per frame). At 100 frames/s this
+            exceeds what 921600 baud can carry as text, so expect USB losses
+            (visible as gaps in rx_idx) unless the baud rate is raised.
+
+    config CSI_RX_QUEUE_LEN
+        int "Queue length between the CSI callback and the output task"
+        range 4 128
+        default 32
+
+    config CSI_RX_STATS_INTERVAL_S
+        int "Seconds between '# STATS' lines"
+        range 1 600
+        default 5
+
+endmenu

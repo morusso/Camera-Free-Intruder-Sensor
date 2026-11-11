@@ -1,0 +1,11 @@
+menu "CSI link (shared by TX and RX)"
+
+    config CSI_LINK_CHANNEL
+        int "Wi-Fi channel (2.4 GHz)"
+        range 1 13
+        default 11
+        help
+            Must be identical on the transmitter and the receiver.
+            Pick the least busy channel (step 1.6 of the plan).
+
+endmenu

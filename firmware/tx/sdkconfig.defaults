@@ -1,0 +1,8 @@
+CONFIG_IDF_TARGET="esp32s3"
+# ESP32-S3FN8 has 8 MB of flash
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+# 1 ms tick: gives an exact 10 ms period at 100 Hz
+CONFIG_FREERTOS_HZ=1000
+# Sending many small frames: more TX buffers, no aggregation
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=128
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
