@@ -30,3 +30,8 @@ managed_components/
 
 # Training runs (models, metrics)
 ml/runs/
+pki/
+backend/certs/
+firmware/rx/certs/*
+!firmware/rx/certs/.gitkeep
+backend/.env

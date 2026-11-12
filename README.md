@@ -34,13 +34,16 @@ Everything below passes its unit tests, but **without real data and without hard
 | `ml/preprocess.py`, `ml/baseline.py`, `ml/dataset.py` | done |
 | `ml/models.py`, `ml/train.py`, `ml/evaluate.py` (CNN, GRU, autoencoder) | done |
 | `ml/export_tflite.py`, `ml/arena.py` (int8, arena estimate) | done, CNN arena about 13 KB (lower bound) |
+| `firmware/common` C preprocessing, alarm logic, detector pipeline | done, host parity tests against `ml/` (fake model) |
+| `firmware/rx`: TFLite Micro model, detector task, NVS calibration, button/LED, MQTT over mTLS | builds (also with MQTT), **never run on a board**; the model is an untrained placeholder; see `docs/device.md` |
+| `backend/` Mosquitto + Telegraf + InfluxDB + Grafana, `tools/provision_pki.sh` | run with real containers and simulated messages, see `docs/backend.md` |
 
 ## What is left to do
 
 1. **Hardware (Stage 1):** connect the boards, pick a channel, measure jitter and loss, confirm the data format (including the number of CSI values and the order of the pairs), look at the heatmap of an empty room versus movement.
 2. **Data (Stage 2):** collect and label data following `docs/collection-protocol.md` (at least about 3 h per class, over several days), compute the baseline and the false alarm rate per day.
 3. **Models (Stage 3):** train on real data, evaluate on a test set from a different day and after moving furniture, check the quality drop after quantization, simulate per-installation calibration (step 3.5).
-4. **Device (Stage 4):** port the preprocessing to C, run inference on the ESP32-S3, calibration, alarm smoothing, MQTT over TLS, backend (Mosquitto, database, Grafana).
+4. **Device (Stage 4):** code for 4.1-4.7 exists; what is left is hardware: profiling (4.3), flashing and checking calibration/MQTT on boards, the integration test (4.8), and a model trained on real data.
 5. **Multiple links and drift (Stage 5):** fuse decisions from several links, recalibration, a 7-day test.
 6. **Hardening (Stage 6):** Secure Boot, flash encryption, signed OTA, mTLS, threat model, privacy.
 
@@ -50,8 +53,8 @@ Everything below passes its unit tests, but **without real data and without hard
 firmware/   tx, rx, common (ESP-IDF)
 tools/      CSI reader, live view, labeling, label alignment, jitter report
 ml/         preprocessing, baseline, dataset, models, training, evaluation, TFLite export
-backend/    (empty, Stage 4)
-docs/       data format, data collection protocol
+backend/    docker-compose: Mosquitto (mTLS), Telegraf, InfluxDB, Grafana
+docs/       data format, data collection protocol, device (detector, calibration, MQTT), backend
 data/       data (not in git)
 ```
 

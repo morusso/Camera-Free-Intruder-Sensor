@@ -1,0 +1,387 @@
+{
+ "uid": "csi-sensors",
+ "title": "CSI sensors",
+ "tags": [
+  "csi"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "10s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "panels": [
+  {
+   "id": 1,
+   "title": "Sensors (last status)",
+   "type": "table",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 12,
+    "h": 6
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: -15m)\n  |> filter(fn: (r) => r._measurement == \"sensor_status\")\n  |> last()\n  |> pivot(rowKey: [\"device\",\"link\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"device\",\"link\",\"state\",\"online\",\"alarm\",\"csi_link\",\"calib_pct\",\"wifi_rssi\",\"uptime_s\"])\n  |> group()"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "description": "Status messages are retained, but only the last 15 minutes are shown: a silent device drops out of the table."
+  },
+  {
+   "id": 2,
+   "title": "Alarms in the selected range",
+   "type": "stat",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 6,
+    "h": 6
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_event\" and (r._field == \"p_person\"))\n  |> filter(fn: (r) => r.event == \"alarm_start\")\n  |> group()\n  |> count()"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "values": false
+    },
+    "colorMode": "value"
+   }
+  },
+  {
+   "id": 3,
+   "title": "Link lost events",
+   "type": "stat",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 0,
+    "w": 6,
+    "h": 6
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_event\" and (r._field == \"p_person\"))\n  |> filter(fn: (r) => r.event == \"link_lost\")\n  |> group()\n  |> count()"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 4,
+   "title": "Alarm state",
+   "type": "state-timeline",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 24,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_status\" and (r._field == \"alarm\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "quiet",
+         "color": "green"
+        },
+        "1": {
+         "text": "ALARM",
+         "color": "red"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 5,
+   "title": "Alarm and link history",
+   "type": "table",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 11,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_event\" and r._field == \"confidence\")\n  |> keep(columns: [\"_time\",\"device\",\"link\",\"event\",\"class\",\"_value\"])\n  |> rename(columns: {_value: \"confidence\"})\n  |> group()\n  |> sort(columns: [\"_time\"], desc: true)"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 6,
+   "title": "P(person) of the last window",
+   "type": "timeseries",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 11,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_metrics\" and (r._field == \"p_person\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "min": 0,
+     "max": 1
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 7,
+   "title": "Feature distribution: window energy (drift)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 19,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_metrics\" and (r._field == \"energy\" or r._field == \"energy_avg\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {},
+   "description": "Mean squared normalized amplitude of the window. In an empty room it should stay near the value measured right after calibration. A slow rise means drift: recalibrate."
+  },
+  {
+   "id": 8,
+   "title": "Inference time (us)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 19,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_metrics\" and (r._field == \"infer_us_avg\" or r._field == \"infer_us_max\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 9,
+   "title": "Free heap (min since boot)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 27,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_metrics\" and (r._field == \"heap_min\" or r._field == \"heap_free\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": []
+   },
+   "options": {},
+   "description": "Step 4.8: must stay flat over 24 h (no leaks)."
+  },
+  {
+   "id": 10,
+   "title": "Stream resets and dropped frames",
+   "type": "timeseries",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx-csi"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 27,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "influxdb",
+      "uid": "influx-csi"
+     },
+     "refId": "A",
+     "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_metrics\" and (r._field == \"gaps\" or r._field == \"queue_drops\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  }
+ ],
+ "templating": {
+  "list": []
+ }
+}

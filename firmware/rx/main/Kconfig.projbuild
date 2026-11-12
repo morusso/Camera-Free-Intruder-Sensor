@@ -8,6 +8,7 @@ menu "CSI receiver"
             On: LLTF + HT-LTF (up to 384 values per frame). At 100 frames/s this
             exceeds what 921600 baud can carry as text, so expect USB losses
             (visible as gaps in rx_idx) unless the baud rate is raised.
+            The detector always uses the first 128 values (LLTF).
 
     config CSI_RX_QUEUE_LEN
         int "Queue length between the CSI callback and the output task"
@@ -18,5 +19,135 @@ menu "CSI receiver"
         int "Seconds between '# STATS' lines"
         range 1 600
         default 5
+
+    config CSI_RX_STREAM_UART
+        bool "Stream every CSI frame as a CSI_DATA line (for data collection)"
+        default y
+        help
+            Needed by tools/csi_reader.py. Turn off for a deployed sensor: formatting 100 lines per second
+            costs CPU and the console is not needed.
+
+    config CSI_RX_DETECTOR
+        bool "Run the on-device detector (preprocessing, model, alarm)"
+        default y
+
+    menu "Detector"
+        depends on CSI_RX_DETECTOR
+
+        config CSI_DET_STRIDE
+            int "Frames between evaluations"
+            range 1 128
+            default 32
+
+        config CSI_DET_CALIB_SECONDS
+            int "Empty-room calibration length (seconds)"
+            range 10 3600
+            default 180
+            help
+                Frames used for the baseline = seconds * sample rate. The room must be empty.
+
+        config CSI_DET_SAMPLE_RATE_HZ
+            int "Sample rate of the link (Hz), must match the TX"
+            range 10 1000
+            default 100
+
+        config CSI_DET_ALARM_ON_PCT
+            int "Alarm on: P(person) above this (percent)"
+            range 1 99
+            default 60
+
+        config CSI_DET_ALARM_OFF_PCT
+            int "Alarm off: P(person) below this (percent, not above the 'on' value)"
+            range 1 99
+            default 40
+
+        config CSI_DET_ALARM_N
+            int "Smoothing: look at the last N windows"
+            range 1 16
+            default 5
+
+        config CSI_DET_ALARM_K_ON
+            int "Smoothing: alarm on when at least K of N windows are positive"
+            range 1 16
+            default 3
+
+        config CSI_DET_ALARM_K_OFF
+            int "Smoothing: alarm off when fewer than K of N windows are positive"
+            range 1 16
+            default 1
+
+        config CSI_DET_ALARM_MIN_HOLD
+            int "Minimum alarm length (windows)"
+            range 0 1000
+            default 5
+
+        config CSI_DET_MAX_CALIB_STD_X100
+            int "Reject a calibration whose mean amplitude std (x100) is above this, 0 = no check"
+            range 0 100000
+            default 0
+            help
+                Protects against calibrating with a person in the room. Pick a value from real recordings
+                of an empty room (ml/baseline.py) and leave a safety margin.
+
+        config CSI_DET_LINK_TIMEOUT_MS
+            int "No frames for this long = link lost event"
+            range 500 60000
+            default 3000
+
+        config CSI_DET_BUTTON_GPIO
+            int "Calibration button GPIO (hold 2 s), -1 = none"
+            range -1 48
+            default 0
+            help
+                GPIO0 is the BOOT button on the DevKit. Active low with the internal pull-up.
+
+        config CSI_DET_LED_GPIO
+            int "Status LED GPIO (plain LED, active high), -1 = none"
+            range -1 48
+            default -1
+            help
+                The RGB LED of the DevKitM-1 is addressable and needs the led_strip driver, which is not
+                used here. Blink: uncalibrated = fast, calibrating = on, alarm = very fast, running = off.
+    endmenu
+
+    config CSI_RX_MQTT
+        bool "Connect to Wi-Fi and publish events over MQTT with TLS"
+        default n
+        help
+            Needs firmware/rx/certs/ca.pem, client.crt and client.key (see docs/backend.md, tools/provision_device.sh).
+            The access point must use the same channel as CSI_LINK_CHANNEL, because the radio has one channel.
+
+    menu "MQTT"
+        depends on CSI_RX_MQTT
+
+        config CSI_NODE_ID
+            string "Device ID (topic sensors/<id>/...)"
+            default "rx-01"
+
+        config CSI_NODE_LINK_ID
+            string "Link ID reported in events"
+            default "link-1"
+
+        config CSI_WIFI_SSID
+            string "Wi-Fi SSID"
+            default ""
+
+        config CSI_WIFI_PASSWORD
+            string "Wi-Fi password"
+            default ""
+
+        config CSI_MQTT_URI
+            string "Broker URI"
+            default "mqtts://broker.local:8883"
+
+        config CSI_MQTT_METRICS_INTERVAL_S
+            int "Seconds between metrics messages"
+            range 5 3600
+            default 60
+
+        config CSI_SNTP_SERVER
+            string "NTP server"
+            default "pool.ntp.org"
+    endmenu
 
 endmenu

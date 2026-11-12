@@ -1,0 +1,8 @@
+menu "CSI model"
+    config CSI_MODEL_ARENA_BYTES
+        int "TFLite Micro tensor arena (bytes)"
+        default 81920
+        range 4096 262144
+        help
+            Budget of the plan is 80 KB. Read the real use with csi_model_arena_used() and shrink this afterwards.
+endmenu
