@@ -19,6 +19,8 @@
 #include "nvs_flash.h"
 
 #include "csi_link.h"
+#include "csi_model.h"
+#include "preprocess_params.h"
 
 /* A bool Kconfig option that is "n" is not defined at all, so test it with #ifdef. */
 #ifdef CONFIG_CSI_RX_USE_HTLTF
@@ -160,6 +162,30 @@ static void csi_init(void)
     ESP_ERROR_CHECK(esp_wifi_set_csi(true));
 }
 
+/* Boot check of the classifier: golden output, arena use and the time of one inference (steps 4.2/4.3). */
+static void model_selftest(void)
+{
+    esp_err_t err = csi_model_init();
+    if (err != ESP_OK) {
+        printf("# MODEL init failed: %s\n", esp_err_to_name(err));
+        return;
+    }
+    const int diff = csi_model_selftest();
+
+    static float window[128 * CSI_PP_N_KEEP];  /* zeros: the empty-room baseline */
+    float probs[8] = {0};
+    uint32_t us = 0;
+    if (csi_model_input_len() != sizeof(window) / sizeof(float) || csi_model_n_classes() > 8) {
+        printf("# MODEL unexpected shape: input=%u classes=%u\n", (unsigned)csi_model_input_len(),
+               (unsigned)csi_model_n_classes());
+        return;
+    }
+    csi_model_infer(window, probs, &us);
+    printf("# MODEL ok: input=%u classes=%u arena_used=%u golden_max_diff=%d infer_us=%lu free_heap=%lu\n",
+           (unsigned)csi_model_input_len(), (unsigned)csi_model_n_classes(), (unsigned)csi_model_arena_used(),
+           diff, (unsigned long)us, (unsigned long)esp_get_free_heap_size());
+}
+
 void app_main(void)
 {
     esp_err_t ret = nvs_flash_init();
@@ -179,6 +205,8 @@ void app_main(void)
            "sig_len,rx_format,len,first_word,data\n");
     printf("# CSI RX: channel=%d htltf=%d tx_mac=" MACSTR "\n",
            CONFIG_CSI_LINK_CHANNEL, USE_HTLTF, MAC2STR(TX_MAC));
+
+    model_selftest();
 
     wifi_init();
     csi_init();
