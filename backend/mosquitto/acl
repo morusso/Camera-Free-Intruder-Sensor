@@ -1,0 +1,10 @@
+# A device (CN = its id, e.g. rx-01) may publish only below sensors/<id>/ and read only its own command topic.
+pattern write sensors/%u/event
+pattern write sensors/%u/status
+pattern write sensors/%u/metrics
+pattern read sensors/%u/cmd
+
+# The backend (CN = backend) reads everything and may send commands to any sensor.
+user backend
+topic read sensors/#
+topic write sensors/+/cmd

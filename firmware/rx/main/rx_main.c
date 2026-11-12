@@ -3,7 +3,9 @@
  *
  * Core 0 (Wi-Fi): the CSI callback only copies the data into a queue.
  * Core 1: the output task formats each frame as one text line (docs/format.md)
- *         and writes it to the console UART.
+ *         and writes it to the console UART (CONFIG_CSI_RX_STREAM_UART); the detector task runs
+ *         preprocessing, the model and the alarm logic (CONFIG_CSI_RX_DETECTOR, detector_task.c);
+ *         with CONFIG_CSI_RX_MQTT the events go to the broker (node_mqtt.c).
  */
 #include <stdio.h>
 #include <string.h>
@@ -20,6 +22,8 @@
 
 #include "csi_link.h"
 #include "csi_model.h"
+#include "node.h"
+#include "node_mqtt.h"
 #include "preprocess_params.h"
 
 /* A bool Kconfig option that is "n" is not defined at all, so test it with #ifdef. */
@@ -52,7 +56,9 @@ typedef struct {
     int8_t csi[CSI_MAX_LEN];
 } csi_item_t;
 
+#ifdef CONFIG_CSI_RX_STREAM_UART
 static QueueHandle_t s_queue;
+#endif
 /* Written only by the Wi-Fi task, read by the stats printer: plain 32-bit accesses. */
 static volatile uint32_t s_rx_idx;
 static volatile uint32_t s_queue_drops;
@@ -73,6 +79,10 @@ static void csi_rx_cb(void *ctx, wifi_csi_info_t *info)
         return;
     }
 
+#ifdef CONFIG_CSI_RX_DETECTOR
+    detector_feed(idx, (const int8_t *)info->buf, info->len);
+#endif
+#ifdef CONFIG_CSI_RX_STREAM_UART
     csi_item_t item;
     item.rx_idx = idx;
     item.tx_seq = 0;
@@ -91,16 +101,17 @@ static void csi_rx_cb(void *ctx, wifi_csi_info_t *info)
     if (xQueueSend(s_queue, &item, 0) != pdTRUE) {
         s_queue_drops++;
     }
+#endif
 }
 
+#ifdef CONFIG_CSI_RX_STREAM_UART
 static void output_task(void *arg)
 {
     static char line[LINE_BUF_SIZE];
     csi_item_t item;
-    TickType_t last_stats = xTaskGetTickCount();
 
     for (;;) {
-        if (xQueueReceive(s_queue, &item, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        if (xQueueReceive(s_queue, &item, portMAX_DELAY) == pdTRUE) {
             int n = snprintf(line, sizeof(line), "CSI_DATA,%lu,", (unsigned long)item.rx_idx);
             if (item.tx_seq_valid) {
                 n += snprintf(line + n, sizeof(line) - n, "%lu,", (unsigned long)item.tx_seq);
@@ -117,14 +128,28 @@ static void output_task(void *arg)
             n += snprintf(line + n, sizeof(line) - n, "]\"\n");
             fwrite(line, 1, n, stdout);
         }
+    }
+}
+#endif
 
-        if (xTaskGetTickCount() - last_stats >= pdMS_TO_TICKS(CONFIG_CSI_RX_STATS_INTERVAL_S * 1000)) {
-            last_stats = xTaskGetTickCount();
-            printf("# STATS frames=%lu queue_drops=%lu oversize=%lu free_heap=%lu stack_free=%u\n",
-                   (unsigned long)s_rx_idx, (unsigned long)s_queue_drops, (unsigned long)s_oversize,
-                   (unsigned long)esp_get_free_heap_size(),
-                   (unsigned)uxTaskGetStackHighWaterMark(NULL));
-        }
+static void stats_task(void *arg)
+{
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_CSI_RX_STATS_INTERVAL_S * 1000));
+        printf("# STATS frames=%lu queue_drops=%lu oversize=%lu free_heap=%lu min_heap=%lu stack_free=%u\n",
+               (unsigned long)s_rx_idx, (unsigned long)s_queue_drops, (unsigned long)s_oversize,
+               (unsigned long)esp_get_free_heap_size(), (unsigned long)esp_get_minimum_free_heap_size(),
+               (unsigned)uxTaskGetStackHighWaterMark(NULL));
+#ifdef CONFIG_CSI_RX_DETECTOR
+        node_stats_t d;
+        detector_get_stats(&d);
+        printf("# DET state=%s calib=%u%% link=%u alarm=%u frames=%lu windows=%lu alarms=%lu gaps=%lu "
+               "drops=%lu infer_us_avg=%lu infer_us_max=%lu p_person=%.2f energy=%.3f\n",
+               detector_state_name(d.state), d.calib_pct, d.link_up, d.alarm_active, (unsigned long)d.frames,
+               (unsigned long)d.windows, (unsigned long)d.alarms, (unsigned long)d.gaps,
+               (unsigned long)d.queue_drops, (unsigned long)d.infer_us_avg, (unsigned long)d.infer_us_max,
+               d.p_person_last, d.energy_last);
+#endif
     }
 }
 
@@ -195,11 +220,14 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+#ifdef CONFIG_CSI_RX_STREAM_UART
     s_queue = xQueueCreate(CONFIG_CSI_RX_QUEUE_LEN, sizeof(csi_item_t));
     ESP_ERROR_CHECK(s_queue ? ESP_OK : ESP_ERR_NO_MEM);
 
     /* Core 1: formatting and serial output, away from the Wi-Fi task on core 0. */
     xTaskCreatePinnedToCore(output_task, "csi_out", 6144, NULL, OUT_TASK_PRIORITY, NULL, 1);
+#endif
+    xTaskCreatePinnedToCore(stats_task, "stats", 3072, NULL, 1, NULL, 1);
 
     printf("# CSI_FMT,1,rx_idx,tx_seq,mac,rssi,rate,noise_floor,channel,local_timestamp,"
            "sig_len,rx_format,len,first_word,data\n");
@@ -208,7 +236,13 @@ void app_main(void)
 
     model_selftest();
 
+#ifdef CONFIG_CSI_RX_DETECTOR
+    detector_start();
+#endif
     wifi_init();
     csi_init();
+#ifdef CONFIG_CSI_RX_MQTT
+    node_mqtt_start();
+#endif
     ESP_LOGW(TAG, "CSI capture started");
 }
